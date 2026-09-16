@@ -1,0 +1,8 @@
+demo = {
+  AND = {
+    expensive_check = yes
+  }
+}
+expensive_check = {
+  always = yes
+}

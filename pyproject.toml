@@ -1,0 +1,25 @@
+[project]
+name = "profile-analyzer"
+version = "0.1.0"
+description = "Offline hotspot reports and source graphs for EU5 script profiler dumps."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "JanB1989"}]
+dependencies = []
+
+[project.scripts]
+profile-analyzer = "profile_analyzer.cli:main"
+
+[project.urls]
+Repository = "https://github.com/JanB1989/profile-analyzer"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

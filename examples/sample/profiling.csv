@@ -1,0 +1,2 @@
+File Location;Bottleneck Time;Call Count;Max Time;Min Time;Self Time;Total Time;Average Time (Inclusive);Average Time (Exclusive)
+trigger @ common/scripted_triggers/demo.txt:2;1;100;0.1;0;2;10;0;0
