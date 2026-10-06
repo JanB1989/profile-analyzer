@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from profile_analyzer import __version__
+from profile_analyzer import __version__, game_speed
 from profile_analyzer.analyzer import host_path, new_report_directory, read_capture, write_report
 
 
@@ -22,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mod-root", action="append", default=[], help="Optional mod root; repeat in load order.")
     parser.add_argument("--source", action="append", default=[], metavar="NAME=PATH",
                         help="Optional named source root; repeat in load order, after --mod-root.")
+    parser.add_argument("--saves", help="Save games folder for autosave timestamps (default: <logs>/../save games).")
     parser.add_argument("--time-unit", choices=("raw", "seconds", "milliseconds", "microseconds"),
                         default="raw", help="Unit of input values, if independently known (default: raw).")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -46,7 +48,49 @@ def source_roots(args, base: Path) -> list[tuple[str, Path]]:
     return roots
 
 
+def build_speed_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="profile-analyzer speed",
+        description="Seconds per game year of the running (or last) EU5 session, from the speed log and autosaves.",
+    )
+    parser.add_argument("logs", help="EU5 logs folder holding performance_degradation.log.")
+    parser.add_argument("--saves", help="Save games folder (default: <logs>/../save games).")
+    parser.add_argument("--output", "-o", default="reports", help="Parent of timestamped reports (default: ./reports).")
+    parser.add_argument("--label", default="game-speed", help="Report name (default: game-speed).")
+    return parser
+
+
+def speed_main(argv: list[str]) -> int:
+    parser = build_speed_parser()
+    args = parser.parse_args(argv)
+    base = Path.cwd()
+    try:
+        logs = host_path(args.logs, base)
+        saves = host_path(args.saves, base) if args.saves else game_speed.default_saves_dir(logs)
+        speed = game_speed.read_session(logs, saves)
+        if speed is None:
+            raise ValueError(f"No {game_speed.PERF_LOG} in {logs}")
+        output = new_report_directory(host_path(args.output, base), args.label)
+        page = game_speed.write_speed_report(speed, args.label, output)
+    except (OSError, ValueError) as exc:
+        parser.exit(2, f"profile-analyzer speed: {exc}\n")
+    print(game_speed.text_report(speed))
+    print(f"Report: {page}")
+    return 0
+
+
+def capture_speed(capture: dict, input_path: Path, saves: str | None, base: Path) -> None:
+    """Seconds per game year for a live logs folder; an earlier report keeps its stored series."""
+    if capture.get("speed") or not capture.get("performance") or not input_path.is_dir():
+        return
+    saves_dir = host_path(saves, base) if saves else game_speed.default_saves_dir(input_path)
+    capture["speed"] = game_speed.read_session(input_path, saves_dir, capture["performance"])
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["speed"]:
+        return speed_main(argv[1:])
     parser = build_parser()
     args = parser.parse_args(argv)
     base = Path.cwd()
@@ -55,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         input_path = host_path(args.input, base)
         capture = read_capture(input_path)
         capture["label"] = args.label or capture["label"]
+        capture_speed(capture, input_path, args.saves, base)
         baseline = read_capture(host_path(args.baseline, base)) if args.baseline else None
         if baseline and not (capture["datasets"].keys() & baseline["datasets"].keys()):
             raise ValueError("Capture and baseline have no matching profiler views")
@@ -71,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
     for scope, dataset in report["datasets"].items():
         print(f"{scope}: {dataset['raw_rows']:,} rows, {dataset['duplicates']:,} duplicate locations, "
               f"{dataset['resolved']:,} source-resolved, {len(dataset['edges']):,} inferred edges")
+    if report.get("speed"):
+        print(game_speed.text_report(report["speed"]))
     print(f"Report: {output / 'index.html'}")
     print(f"Data: {output / 'profile.json'}")
     print("Times retain dump units. Graph edges are source-inferred, not recorded call stacks.")

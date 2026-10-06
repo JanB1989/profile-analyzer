@@ -19,6 +19,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
+from profile_analyzer.game_speed import inline_assets
+
 
 METRICS = {
     "Bottleneck Time": "bottleneck",
@@ -62,6 +64,8 @@ def read_capture(path: Path) -> dict:
         result["datasets"][scope] = read_csv(filename)
     performance = (path if path.is_dir() else path.parent) / "performance_degradation.log"
     result["performance"] = read_performance(performance) if performance.is_file() else None
+    stored_speed = (path if path.is_dir() else path.parent) / "speed.json"
+    result["speed"] = json.loads(stored_speed.read_text(encoding="utf-8")) if stored_speed.is_file() else None
     return result
 
 
@@ -312,6 +316,10 @@ def write_report(capture: dict, baseline: dict | None, roots, output: Path, time
             (snapshot / name).write_bytes(dataset.pop("_raw_bytes"))
         if current["performance"]:
             (snapshot / "performance_degradation.log").write_bytes(current["performance"].pop("_raw_bytes"))
+        if current.get("speed"):
+            (snapshot / "speed.json").write_text(json.dumps(current["speed"], allow_nan=False), encoding="utf-8")
+        else:
+            (snapshot / "speed.json").unlink(missing_ok=True)
     files = {n["file"] for d in capture["datasets"].values() for n in d["nodes"]}
     sources, warnings = build_source_index(files, roots) if roots else ({}, [])
     for dataset in capture["datasets"].values():
@@ -329,7 +337,7 @@ def write_report(capture: dict, baseline: dict | None, roots, output: Path, time
     payload = {"schema_version": 1, "label": capture["label"], "unit": time_unit,
                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
                "node_columns": NODE_COLUMNS, "datasets": capture["datasets"], "baseline": baseline,
-               "performance": capture["performance"],
+               "performance": capture["performance"], "speed": capture.get("speed"),
                "sources": {file: {k: v for k, v in source.items() if k != "entries"}
                            for file, source in sources.items()}, "warnings": warnings, "notes": notes,
                "source_roots": [{"name": name, "path": str(root)} for name, root in roots]}
@@ -355,7 +363,7 @@ def write_report(capture: dict, baseline: dict | None, roots, output: Path, time
     serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     (output / "profile.json").write_text(serialized, encoding="utf-8")
     encoded = base64.b64encode(gzip.compress(serialized.encode(), mtime=0)).decode()
-    template = Path(__file__).with_name("profiler_explorer.html").read_text(encoding="utf-8")
+    template = inline_assets(Path(__file__).with_name("profiler_explorer.html").read_text(encoding="utf-8"))
     (output / "index.html").write_text(template.replace("__PROFILE_GZIP_BASE64__", encoded), encoding="utf-8")
     return payload
 
