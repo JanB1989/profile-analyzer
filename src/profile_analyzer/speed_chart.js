@@ -31,7 +31,8 @@ function renderSpeed(container, speed){
   g.append(node('title',{},`${date(seg.start)} → ${date(seg.end)}: ${one(seg.per_year)} s per game year (${Math.round(seg.seconds)} s for ${seg.years.toFixed(2)} years, ${seg.sources})`+(seg.outlier?` · pause outlier, neighbours ${one(seg.reference)}`:'')));
   svg.append(g);
  }
+ const run=speed.running||[];
+ if(run.length>1){svg.append(node('polyline',{points:run.map(p=>`${X(p.x)},${Y(p.per_year)}`).join(' '),class:'speed-run'}));for(const p of run){const c=node('circle',{cx:X(p.x),cy:Y(p.per_year),r:3,class:'speed-run-dot'});c.append(node('title',{},`${date(p.x)}: ${one(p.per_year)} s per game year (${speed.running_window}-year running average)`));svg.append(c)}}
  const chart=html('div',undefined,'speed-chart');chart.append(svg);container.append(chart);
- container.append(html('p',`Bars: wall-clock seconds for each stretch between two dated points (speed log rows and autosaves of this session), divided by the game years it covers. Grey bars are more than ${speed.outlier_factor}× slower than their neighbours (paused, menus, alt-tab) and stay out of the average. Saving time is included.`,'muted speed-note'));
- if(speed.decades?.length){const table=html('table',undefined,'speed-table'),head=html('tr');for(const t of ['Decade','Seconds per game year','Game years covered'])head.append(html('th',t));table.append(head);for(const d of speed.decades){const tr=html('tr');for(const t of [d.decade+'s',one(d.seconds_per_year),d.years.toFixed(1)])tr.append(html('td',t));table.append(tr)}container.append(table)}
+ container.append(html('p',`Bars: wall-clock seconds for each stretch between two dated points (speed log rows and autosaves of this session), divided by the game years it covers. Line: ${speed.running_window||10}-year running average. Dashed: average of the whole session. Grey bars are more than ${speed.outlier_factor}× slower than their neighbours (paused, menus, alt-tab) and stay out of both averages. Saving time is included.`,'muted speed-note'));
 }

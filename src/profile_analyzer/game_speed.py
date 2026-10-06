@@ -32,6 +32,8 @@ MONTH_START = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
 # A segment is a pause outlier when it is this much slower than the median of its neighbours.
 OUTLIER_FACTOR = 1.6
 NEIGHBOURS = 3
+# Game years the running average spans (centred).
+RUNNING_WINDOW = 10.0
 
 
 def game_years(year: int, month: int, day: int) -> float:
@@ -145,6 +147,25 @@ def summary(result: list[dict]) -> dict:
             "paused_seconds": sum(s["seconds"] - s["years"] * s["reference"] for s in result if s["outlier"])}
 
 
+def running_average(result: list[dict], window: float = RUNNING_WINDOW) -> list[dict]:
+    """Clean seconds per game year over the ``window`` game years centred on each segment's midpoint
+    (time-weighted by each kept segment's overlap with the window)."""
+    kept = [s for s in result if not s["outlier"]]
+    points = []
+    for s in kept:
+        mid = (s["start"] + s["end"]) / 2
+        low, high = mid - window / 2, mid + window / 2
+        seconds = years = 0.0
+        for other in kept:
+            overlap = min(high, other["end"]) - max(low, other["start"])
+            if overlap > 0:
+                seconds += other["per_year"] * overlap
+                years += overlap
+        if years:
+            points.append({"x": mid, "per_year": seconds / years})
+    return points
+
+
 def by_decade(result: list[dict]) -> list[dict]:
     """Clean seconds per game year per decade; a segment's time splits by its years in each decade."""
     buckets: dict[int, list[float]] = {}
@@ -181,7 +202,7 @@ def read_session(logs_dir: Path, saves_dir: Path | None, performance: dict | Non
     return {"launch": datetime.fromtimestamp(launch).isoformat(timespec="seconds") if launch else None,
             "playthrough": playthrough, "points": sorted(points, key=lambda p: p["wall"]),
             "segments": result, "summary": summary(result), "decades": by_decade(result),
-            "outlier_factor": OUTLIER_FACTOR, "log": str(log), "saves": str(saves_dir) if saves_dir else None}
+            "running": running_average(result), "running_window": RUNNING_WINDOW, "outlier_factor": OUTLIER_FACTOR, "log": str(log), "saves": str(saves_dir) if saves_dir else None}
 
 
 def default_saves_dir(logs_dir: Path) -> Path | None:
@@ -209,9 +230,8 @@ SPEED_CSS = (
     ".speed-seg rect{fill:var(--accent);opacity:.85}.speed-seg:hover rect{opacity:1}"
     ".speed-out rect{fill:#5d6b79;opacity:.45}.speed-out text{fill:var(--muted)}"
     ".speed-mean{stroke:var(--warm);stroke-width:1.5;stroke-dasharray:6 4}.speed-chart text.speed-mean-label{fill:var(--warm)}"
-    ".speed-note{font-size:12px}.speed-table{border-collapse:collapse;margin-top:10px;font-variant-numeric:tabular-nums}"
-    ".speed-table th,.speed-table td{padding:6px 14px;border-bottom:1px solid var(--line);text-align:right}"
-    ".speed-table th:first-child,.speed-table td:first-child{text-align:left}"
+    ".speed-note{font-size:12px}.speed-run{fill:none;stroke:var(--text);stroke-width:2.5;stroke-linejoin:round}"
+    ".speed-run-dot{fill:var(--text)}"
     "@media(max-width:800px){.speed-stats{grid-template-columns:repeat(2,1fr)}}"
 )
 

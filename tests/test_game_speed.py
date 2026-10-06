@@ -58,6 +58,17 @@ def test_session_merges_log_and_autosaves_and_drops_pause(session):
     assert summary["paused_seconds"] == pytest.approx(300)
     assert summary["first_date"] == "1337.4.1" and summary["last_date"] == "1372.4.1"
     assert all(d["seconds_per_year"] == pytest.approx(25) for d in speed["decades"])
+    assert speed["running"] and all(p["per_year"] == pytest.approx(25) for p in speed["running"])
+
+
+def test_running_average_weights_overlap_and_skips_pauses():
+    result = [{"start": 0, "end": 10, "years": 10, "seconds": 200, "per_year": 20, "outlier": False},
+              {"start": 10, "end": 20, "years": 10, "seconds": 400, "per_year": 40, "outlier": False},
+              {"start": 20, "end": 25, "years": 5, "seconds": 900, "per_year": 180, "outlier": True}]
+    running = game_speed.running_average(result, window=10)
+    assert [p["x"] for p in running] == [5, 15]
+    assert running[0]["per_year"] == pytest.approx(20) and running[1]["per_year"] == pytest.approx(40)
+    assert game_speed.running_average(result, window=20)[0]["per_year"] == pytest.approx((20 * 10 + 40 * 5) / 15)
 
 
 def test_loaded_earlier_save_restarts_the_series():
